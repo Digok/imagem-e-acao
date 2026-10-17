@@ -37,7 +37,7 @@
   .carta{
     background:var(--papel);border-radius:18px;border:4px solid var(--tinta);
     box-shadow:0 6px 0 var(--tinta);
-    min-height:210px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    min-height:170px;display:flex;flex-direction:column;align-items:center;justify-content:center;
     padding:22px 18px;text-align:center;position:relative;
   }
   .cat{
@@ -69,11 +69,30 @@
   #btnTempo{background:var(--verde);color:#fff}
   #btnTempo.parar{background:var(--vermelho)}
   .rodape{color:#c7d6e6;font-size:13px;text-align:center}
+  .placar{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:8px}
+  .time{
+    background:#16324f;color:var(--papel);border:3px solid #16324f;border-radius:14px;
+    padding:8px 6px;text-align:center;cursor:pointer;opacity:.75;
+  }
+  .time.vez{background:var(--papel);color:var(--tinta);border-color:var(--amarelo);opacity:1;box-shadow:0 4px 0 var(--amarelo)}
+  .time .nome{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .time .pts{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:32px;line-height:1.1}
+  .vezde{color:var(--papel);text-align:center;font-weight:800;font-size:16px;margin-top:-6px}
+  .vezde b{color:var(--amarelo)}
+  .resultado{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .resultado button{font-size:19px;padding:14px 8px}
+  #btnAcertou{background:#7fd1a0}
+  #btnErrou{background:#f3a59b}
+  .ajustes{display:flex;justify-content:center;gap:14px}
+  .ajustes a{color:#c7d6e6;font-size:13px;font-weight:800;text-decoration:underline;cursor:pointer}
 </style>
 </head>
 <body>
 <h1>Imagem <span>&amp;</span> Ação</h1>
 <main>
+  <section class="placar" id="placar"></section>
+  <div class="vezde" id="vezde"></div>
+
   <section class="carta" aria-live="polite">
     <div class="cat" id="cat"></div>
     <div class="palavra vazia" id="palavra">Toque em "Palavra aleatória"</div>
@@ -87,8 +106,15 @@
   <div class="botoes">
     <button id="btnPalavra">🎲 Palavra aleatória</button>
     <button id="btnTempo">▶ Iniciar 1 minuto</button>
+    <div class="resultado">
+      <button id="btnAcertou">✔ Acertou</button>
+      <button id="btnErrou">✘ Não acertou</button>
+    </div>
   </div>
-  <div class="rodape" id="rodape"></div>
+  <div class="ajustes">
+    <a id="lnkMais">+ time</a><a id="lnkMenos">− time</a><a id="lnkZerar">zerar placar</a>
+  </div>
+  <div class="rodape" id="rodape">Toque no nome do time para renomear</div>
 </main>
 
 <script>
@@ -834,7 +860,7 @@ function embaralhar(){
   for(let i=baralho.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[baralho[i],baralho[j]]=[baralho[j],baralho[i]];}
 }
 const el = id => document.getElementById(id);
-function atualizarRodape(){ el("rodape").textContent = `${baralho.length} de ${LISTA.length} palavras restantes`; }
+function atualizarRodape(){ el("rodape").textContent = `${baralho.length} de ${LISTA.length} palavras restantes · toque no time para renomear`; }
 function novaPalavra(){
   if(!baralho.length) embaralhar();
   const {c,p} = baralho.pop();
@@ -889,6 +915,56 @@ function parar(acabou){
 }
 el("btnPalavra").onclick = novaPalavra;
 el("btnTempo").onclick = () => tick ? parar(false) : iniciar();
+
+// ---- Times ----
+const CHAVE = "imagem-acao-times";
+let jogo = JSON.parse(localStorage.getItem(CHAVE) || "null") ||
+  {times:[{n:"Time Azul",p:0},{n:"Time Verde",p:0}], vez:0};
+function salvar(){ localStorage.setItem(CHAVE, JSON.stringify(jogo)); }
+function desenharPlacar(){
+  const pl = el("placar"); pl.innerHTML = "";
+  jogo.times.forEach((t,i) => {
+    const d = document.createElement("div");
+    d.className = "time" + (i===jogo.vez ? " vez" : "");
+    d.innerHTML = `<div class="nome"></div><div class="pts">${t.p}</div>`;
+    d.querySelector(".nome").textContent = t.n;
+    d.onclick = () => {
+      const novo = prompt("Nome do time:", t.n);
+      if(novo && novo.trim()){ t.n = novo.trim().slice(0,20); salvar(); desenharPlacar(); }
+    };
+    pl.appendChild(d);
+  });
+  el("vezde").innerHTML = `Vez do <b></b>`;
+  el("vezde").querySelector("b").textContent = jogo.times[jogo.vez].n;
+}
+function limparCarta(){
+  el("cat").textContent = "";
+  el("palavra").textContent = 'Toque em "Palavra aleatória"';
+  el("palavra").classList.add("vazia");
+}
+function fecharRodada(acertou){
+  if(tick) parar(false); else { mostrar(DURACAO); el("tempo").className="tempo"; }
+  if(acertou){ jogo.times[jogo.vez].p++; bip(990,.2); }
+  jogo.vez = (jogo.vez + 1) % jogo.times.length;
+  salvar(); desenharPlacar(); limparCarta();
+}
+el("btnAcertou").onclick = () => fecharRodada(true);
+el("btnErrou").onclick = () => fecharRodada(false);
+const CORES = ["Time Azul","Time Verde","Time Amarelo","Time Vermelho"];
+el("lnkMais").onclick = () => {
+  if(jogo.times.length >= 4) return alert("Máximo de 4 times.");
+  jogo.times.push({n:CORES[jogo.times.length], p:0}); salvar(); desenharPlacar();
+};
+el("lnkMenos").onclick = () => {
+  if(jogo.times.length <= 2) return alert("Mínimo de 2 times.");
+  if(!confirm(`Remover ${jogo.times[jogo.times.length-1].n}?`)) return;
+  jogo.times.pop(); jogo.vez %= jogo.times.length; salvar(); desenharPlacar();
+};
+el("lnkZerar").onclick = () => {
+  if(!confirm("Zerar o placar de todos os times?")) return;
+  jogo.times.forEach(t => t.p = 0); jogo.vez = 0; salvar(); desenharPlacar();
+};
+desenharPlacar();
 embaralhar(); atualizarRodape();
 </script>
 </body>
